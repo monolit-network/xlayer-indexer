@@ -18,13 +18,31 @@ happy path and silently falls apart everywhere else:
   amounts are denominated in units you didn't expect. The event says one thing;
   the tokens moved another way.
 
-## The principle: truth is in token movements
+## The principle: index what the user experienced
 
 A swap *is* a movement of tokens: someone's balance of A went down, their (or
 their designated recipient's) balance of B went up. Events can lie or be missing;
 **net token flows cannot** — they are the chain's ground truth.
 
-So the parser inverts the standard architecture:
+Just as important: we index the **top-level economic action**, not the plumbing.
+Intermediate hops inside a route are analytically meaningless — no human decided
+to hold the middle token for 400 milliseconds. They cancel out in net flows, so
+the record collapses to the one thing the user actually did.
+
+**Concrete example** (real X Layer tx
+[`0x4f0bce34…`](https://web3.okx.com/explorer/x-layer/tx/0x4f0bce34afc86799ff497ce7f96e96b2fc475da515a817db3bc4c6c13dc27681)):
+the receipt contains two `V3.Swap` pool events, four ERC-20 transfers and two
+router events. Per-event indexers record two pool swaps whose "trader" is a
+router, denominated partly in an intermediate stable leg the user never held.
+We record **one row**:
+
+> `0xbac6…` sold **1.93075925 wSPYx** (tokenized S&P 500) and received
+> **1500.494795 USDC**.
+
+That row matches Debank's independent parse of the same tx digit-for-digit —
+and it is the row an analyst, a PnL model, or an AI agent actually wants.
+
+How it works mechanically:
 
 1. **Events are only triggers.** An *identifier* watches for a known swap-event
    topic anywhere in the receipt — topic-agnostic, no pool/router address lists.
@@ -38,13 +56,30 @@ So the parser inverts the standard architecture:
      clean net-inflow third party; else (last resort) the custodial contract that
      kept the proceeds — recorded as such, with the seller still correctly
      attributed.
-   - *How much?* — net amounts, not event payloads. Multi-hop A→B→C collapses to
-     "gave A, got C" automatically; intermediate hops cancel out in the nets.
+   - *How much?* — net amounts, not event payloads.
 3. **Special forms get structure, not special amounts.** ERC-4337 bundles are cut
    into per-`UserOperationEvent` segments and each segment runs through the same
    heuristic with the smart account as the known sender. Relayed swaps recover
    the sender by descending call traces. In every case the *arithmetic* stays in
    one place — the flow heuristic — so a fix there fixes every venue at once.
+
+## Every transaction is supported from day one
+
+The table layout is a funnel, not a filter:
+
+- **`swap_events`** holds *only* fully-shaped swaps — the graduated, high-trust
+  rows.
+- **`defi_events`** is the universal catch-all: **every smart-contract
+  interaction we did not recognize** still gets a row with the signer's net
+  inflows/outputs. Nothing about the chain is invisible — you can already run
+  analytics on protocols we never heard of (volumes, users, token flows).
+- When a category becomes worth first-class treatment (lending, bridges,
+  launchpads), you *graduate* it: add an identifier + a dedicated heuristic and a
+  sibling table (`lending_events`, `bridge_events`, ...) by the same recipe as
+  `swap_events` — see [ADDING_A_DEX.md](ADDING_A_DEX.md). Rows migrate from the
+  catch-all into shaped form, and coverage ratchets up monotonically.
+- **`transfer_events`** holds plain sends (no contract logic), and
+  **`error_events`** holds parse attempts that failed, with reasons.
 
 ## Failure is data
 

@@ -32,12 +32,14 @@ ecosystem.
 
 ## Tables (ClickHouse)
 
+The layout is a **funnel, not a filter** — every transaction gets a home on day one:
+
 | Table | One row per | What it holds |
 |---|---|---|
-| `swap_events` | user-level swap | base/quote token, amounts, decimals, `sender` (who paid), `receiver` (who got proceeds — may be a custodial router), `source` (venue label), tx/block refs. **The main product.** |
-| `defi_events` | tx we recognized as DeFi but not as a swap | net inflows/outputs per address (Nested columns) — LP operations, claims, unknown protocols. Raw material for extending coverage |
-| `transfer_events` | plain token send | terminal transfers that are not part of a trade |
-| `error_events` | unparsed tx | `tx_hash` + human-readable reason (e.g. "no suitable receiver candidates"). Nothing is dropped silently — this table is how we found and fixed whole missing classes (custodial routers) |
+| `swap_events` | user-level swap | only fully-shaped swaps: base/quote, net amounts, `sender` (who paid), `receiver` (who got proceeds — may be a custodial router), `source` venue label. **The graduated, high-trust product.** |
+| `defi_events` | any unrecognized smart-contract interaction | the universal catch-all: signer's net token inflows/outputs. Protocols we never heard of are still queryable (volumes, users, flows). When a category matters, graduate it into its own sibling table (`lending_events`, `bridge_events`, ...) by the same recipe as swaps — see [docs/ADDING_A_DEX.md](docs/ADDING_A_DEX.md) |
+| `transfer_events` | plain token send | transfers with no contract logic behind them |
+| `error_events` | failed parse attempt | `tx_hash` + human-readable reason. Nothing is dropped silently — this table is how we found and fixed whole missing classes (custodial routers) |
 
 All event tables are `ReplacingMergeTree`: re-parsing any range is **idempotent** —
 duplicates collapse in background merges. Re-run anything, any time.
