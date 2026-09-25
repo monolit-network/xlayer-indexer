@@ -48,7 +48,7 @@ duplicates collapse in background merges. Re-run anything, any time.
 
 ## Philosophy: truth is in token movements
 
-> Full version: [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md)
+> Full version incl. the per-transaction decision tree: [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md)
 
 Most indexers decode protocol-specific event payloads. That breaks the moment a tx
 goes through an aggregator, a custom router, a bundler, or a contract the indexer

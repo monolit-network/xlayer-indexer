@@ -2,6 +2,16 @@
 
 ## The problem with decoding events
 
+| | classic ABI decoder | this indexer |
+|---|---|---|
+| new fork of a DEX | new adapter, redeploy | works day one (same topic) |
+| tx via router/aggregator | router recorded as the trader | real user resolved from flows |
+| ERC-4337 bundle | one row: "bundler called handleOps" | split per user operation, each attributed |
+| lying payload (fee-on-transfer, odd units) | trusted as-is | ignored — net flows are the truth |
+| unknown contract | invisible | in `defi_events` with net flows, day one |
+
+
+
 The standard way to index DEX activity is to *decode protocol events*: know the
 ABI, parse `Swap(amount0In, amount1Out, ...)`, trust the payload. It works on the
 happy path and silently falls apart everywhere else:
@@ -80,6 +90,37 @@ The table layout is a funnel, not a filter:
   catch-all into shaped form, and coverage ratchets up monotonically.
 - **`transfer_events`** holds plain sends (no contract logic), and
   **`error_events`** holds parse attempts that failed, with reasons.
+
+
+## The decision tree (every transaction)
+
+```mermaid
+flowchart TD
+    TX["transaction"] --> AA{"UserOperationEvent<br/>in receipt?"}
+    AA -- "yes" --> SEG["split into per-userOp segments;<br/>sender = smart-account owner;<br/>each segment re-enters the tree"]
+    SEG --> SW
+    AA -- "no" --> SW{"known swap topic<br/>anywhere in receipt?"}
+
+    SW -- "yes" --> S1{"who paid?<br/>signer has a net outflow<br/>of exactly one token?"}
+    S1 -- "yes" --> R
+    S1 -- "no flows at signer" --> TR["descend call traces<br/>(relayed / solver-executed)"]
+    TR --> R{"who received?<br/>resolution ladder"}
+    R -- "1: the seller themselves" --> OK
+    R -- "2: single clean third party" --> OK
+    R -- "3: custodial contract holds the output<br/>(token differs from the one sold)" --> OK2["swap_events<br/>receiver = custodian,<br/>seller still credited"]
+    R -- "4: unresolved" --> ERR[("error_events + reason<br/>nothing dropped silently")]
+    OK[("swap_events<br/>multihop collapsed to one action")]
+
+    SW -- "no" --> T{"plain token send,<br/>no contract logic?"}
+    T -- "yes" --> TE[("transfer_events")]
+    T -- "no" --> DF["defi fallback:<br/>net flows around the signer"]
+    DF --> DE[("defi_events<br/>any contract supported from day one")]
+    DE -. "graduate when a category matters:<br/>add identifier + dedicated heuristic +<br/>sibling table (lending_events, bridge_events, ...)" .-> GR["shaped sibling tables<br/>(same recipe as swap_events)"]
+```
+
+Four exits, all named tables — including honest failures. The ladder in the middle
+is what "not a dumb ABI parser" means in practice: two ways to find the payer,
+four ways to resolve the receiver, and a graduation path for everything else.
 
 ## Failure is data
 
