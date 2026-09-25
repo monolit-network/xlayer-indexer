@@ -68,6 +68,23 @@ actual user are derived from the *net token flows* of the transaction:
    - **custodial routers** (proceeds kept by the platform contract) are recognized,
      recorded, and the seller still gets correct attribution.
 
+## Why data quality is existential for AI agents
+
+Human analysts survive dirty data: they get suspicious, cross-check, discard
+nonsense. LLM agents don't — they take whatever the query returns as ground
+truth and confidently build conclusions on top. Bad indexing doesn't just
+degrade agent analytics; it poisons it. That's why an agent-facing data layer
+must resolve attribution, deduplicate, and collapse plumbing *before* the agent
+sees a single row.
+
+Example: ask an agent "who are the top traders on X Layer?" over raw event data
+and it will name a Uniswap V4 PoolManager contract and a handful of routers —
+then happily "analyze their trading strategy". (Before attribution, the
+PoolManager was our #2 "trader" with 231k swaps.) Over this index, the same
+question returns actual wallets — because routers, bundlers and custodial
+contracts are resolved to the economic actor. The agent isn't wrong about the
+data; the data is wrong about reality — unless the indexer fixes it first.
+
 ## Architecture
 
 ```mermaid
