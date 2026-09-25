@@ -68,18 +68,34 @@ actual user are derived from the *net token flows* of the transaction:
 
 ## Architecture
 
-```
-X Layer node (RPC/WS)
-        │ blocks, receipts, traces
-        ▼
-  indexer (live head, lag 0)          parse_range (backfill / targeted repair)
-        │                                   │  --start/--end or --blocks-file
-        └────────────► parser registry ◄────┘
-                (identifiers → by-transfers heuristic)
-                            │
-                            ▼
-                       ClickHouse
-        swap_events · defi_events · transfer_events · error_events
+```mermaid
+flowchart TB
+    node["X Layer node (RPC + WS)<br/>blocks · receipts · call traces"]
+    live["indexer<br/>live head, reorg-safe, lag 0"]
+    pr["parse_range<br/>backfill ranges · --blocks-file repair"]
+
+    node --> live
+    node --> pr
+
+    subgraph registry["parser registry"]
+        ids["identifiers<br/>topic matchers per venue<br/>(Uniswap v2/v3/v4 · Curve · DODO · iZiSwap · ERC-4337)"]
+        heur["by-transfers heuristic<br/>net token flows → sender / receiver / amounts"]
+        fallback["defi fallback<br/>net flows around the signer"]
+        ids -- "swap topic found" --> heur
+        ids -. "no match" .-> fallback
+    end
+
+    live --> registry
+    pr --> registry
+
+    heur --> swaps[("swap_events<br/>user-level swaps")]
+    fallback --> defi[("defi_events<br/>everything else, still queryable")]
+    registry -. "plain sends" .-> tr[("transfer_events")]
+    registry -. "failed + reason" .-> err[("error_events")]
+
+    swaps --> views["SQL layer (sql/analytics.sql)<br/>attribution · token stats · wallet stats"]
+
+    pg["PostgreSQL<br/>(one tiny optional table)"] -.-> registry
 ```
 
 - `evm/cmd/indexer` — live indexer with reorg handling; resume point derived from indexed data, no separate state to babysit.
