@@ -82,7 +82,7 @@ X Layer node (RPC/WS)
         swap_events · defi_events · transfer_events · error_events
 ```
 
-- `evm/cmd/indexer` — live indexer with reorg handling and persistent state.
+- `evm/cmd/indexer` — live indexer with reorg handling; resume point derived from indexed data, no separate state to babysit.
 - `evm/cmd/parse_range` — batch backfill; `--blocks-file` mode parses an exact
   block list (9× faster for targeted repairs than range sweeps).
 - `sql/schema.sql` — ClickHouse DDL (ReplacingMergeTree → idempotent re-parses;
@@ -97,7 +97,7 @@ cp .env.example .env        # fill in: node URLs, ClickHouse, Postgres DSN
 clickhouse-client < sql/schema.sql
 ```
 
-**Live indexing** (follows the chain head, handles reorgs, resumes from PG state):
+**Live indexing** (follows the chain head, handles reorgs; on restart resumes from the highest block already in ClickHouse):
 
 ```bash
 go build -o bin/indexer ./evm/cmd/indexer
