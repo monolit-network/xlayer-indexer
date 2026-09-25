@@ -135,12 +135,19 @@ Raw rows keep the mechanical sender/receiver. To resolve the human behind
 infrastructure, join your infra-address labels and pick the first non-infra party —
 example view in [`sql/schema.sql`](sql/schema.sql) comments:
 
+`sql/analytics.sql` ships a starter pack: an `infra_labels` table you curate, the
+attribution view over it, and token/wallet stats views:
+
 ```sql
-SELECT attributed_user, count() AS swaps
-FROM v_swap_events_attributed
-WHERE chain = 'xlayer'
-GROUP BY attributed_user ORDER BY swaps DESC
+clickhouse-client < sql/analytics.sql
+
+SELECT wallet, swaps, tokens_traded FROM evm.v_wallet_stats
+WHERE chain = 'xlayer' ORDER BY swaps DESC LIMIT 20;
 ```
+
+Our hosted version layers curated infrastructure labels, physics-based bot
+detection and win-rate smart-money selection on top of this exact schema — the
+open mechanism here is the same one production runs on.
 
 ## License
 
