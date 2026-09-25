@@ -28,7 +28,7 @@ ecosystem.
 | **Go 1.25+** | building the two binaries |
 | **X Layer node** (RPC + WS) | blocks, receipts and call traces; standard op-geth serves the OP era (block 45,000,000 → tip) |
 | **ClickHouse** | the event store — all parsed data lands here (`sql/schema.sql`) |
-| **PostgreSQL** | small operational state only: last processed block per chain + reorg bookkeeping. A stock `postgres:16` with one database is enough — tables are created on first run |
+| **PostgreSQL** | one tiny auto-created table (optional parser overrides). Resume state is derived from ClickHouse itself; reorg tracking is in-memory. A stock `postgres:16` with an empty database is enough |
 
 ## Tables (ClickHouse)
 
@@ -87,6 +87,8 @@ X Layer node (RPC/WS)
   block list (9× faster for targeted repairs than range sweeps).
 - `sql/schema.sql` — ClickHouse DDL (ReplacingMergeTree → idempotent re-parses;
   re-running any range is always safe).
+
+> Full walkthrough incl. node flags and docker compose: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 ## Running
 

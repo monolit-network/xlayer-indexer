@@ -1,3 +1,5 @@
+CREATE DATABASE IF NOT EXISTS evm;
+
 CREATE TABLE evm.swap_events
 (
     `chain` LowCardinality(String),
