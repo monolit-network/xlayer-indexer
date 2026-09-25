@@ -20,6 +20,28 @@ ecosystem.
 | Protocols | Uniswap v2 / v3 / v4, Curve, DODO, iZiSwap — incl. all forks (PotatoSwap, OkieSwap, ...) |
 | Error rate | every unparsed tx recorded in `error_events` with a reason — nothing silently dropped |
 
+
+## Requirements
+
+| Component | Why |
+|---|---|
+| **Go 1.25+** | building the two binaries |
+| **X Layer node** (RPC + WS) | blocks, receipts and call traces; standard op-geth serves the OP era (block 45,000,000 → tip) |
+| **ClickHouse** | the event store — all parsed data lands here (`sql/schema.sql`) |
+| **PostgreSQL** | small operational state only: last processed block per chain + reorg bookkeeping. A stock `postgres:16` with one database is enough — tables are created on first run |
+
+## Tables (ClickHouse)
+
+| Table | One row per | What it holds |
+|---|---|---|
+| `swap_events` | user-level swap | base/quote token, amounts, decimals, `sender` (who paid), `receiver` (who got proceeds — may be a custodial router), `source` (venue label), tx/block refs. **The main product.** |
+| `defi_events` | tx we recognized as DeFi but not as a swap | net inflows/outputs per address (Nested columns) — LP operations, claims, unknown protocols. Raw material for extending coverage |
+| `transfer_events` | plain token send | terminal transfers that are not part of a trade |
+| `error_events` | unparsed tx | `tx_hash` + human-readable reason (e.g. "no suitable receiver candidates"). Nothing is dropped silently — this table is how we found and fixed whole missing classes (custodial routers) |
+
+All event tables are `ReplacingMergeTree`: re-parsing any range is **idempotent** —
+duplicates collapse in background merges. Re-run anything, any time.
+
 ## Philosophy: truth is in token movements
 
 Most indexers decode protocol-specific event payloads. That breaks the moment a tx
@@ -62,15 +84,40 @@ X Layer node (RPC/WS)
 - `sql/schema.sql` — ClickHouse DDL (ReplacingMergeTree → idempotent re-parses;
   re-running any range is always safe).
 
-## Quickstart
+## Running
 
 ```bash
-cp .env.example .env        # point to your X Layer node + ClickHouse + Postgres
+cp .env.example .env        # fill in: node URLs, ClickHouse, Postgres DSN
 clickhouse-client < sql/schema.sql
-go build -o bin/indexer ./evm/cmd/indexer && ./bin/indexer          # live
-go build -o bin/parse_range ./evm/cmd/parse_range
-./bin/parse_range --start-block 45000000 --end-block 45100000       # backfill
 ```
+
+**Live indexing** (follows the chain head, handles reorgs, resumes from PG state):
+
+```bash
+go build -o bin/indexer ./evm/cmd/indexer
+./bin/indexer
+# progress:  curl localhost:19096/status   ->  {"chain":"xlayer","lag":0,...}
+```
+
+**Backfill** (historical ranges; run any number of workers over disjoint ranges):
+
+```bash
+go build -o bin/parse_range ./evm/cmd/parse_range
+./bin/parse_range --start-block 45000000 --end-block 46000000
+```
+
+**Targeted repair** (exact block list — e.g. re-parse every block mentioned in
+`error_events` after a parser improvement; ~9x faster than range sweeps):
+
+```bash
+clickhouse-client -q "SELECT DISTINCT block_number FROM evm.error_events WHERE chain='xlayer'" > blocks.txt
+./bin/parse_range --blocks-file blocks.txt
+```
+
+Both tools are safe to interrupt and re-run (see idempotency note above).
+
+**Adding a new DEX / venue:** one ~40-line identifier file — see
+[docs/ADDING_A_DEX.md](docs/ADDING_A_DEX.md).
 
 Note: X Layer migrated from zkEVM to the OP stack at block **45,000,000** — public
 OP-stack nodes serve history from that block. Earlier history requires a zkEVM
