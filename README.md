@@ -1,10 +1,12 @@
 # xlayer-indexer
 
-**The first complete DEX index of X Layer** — OKX's L2 ("The New Money Chain").
+**The first user-level index of X Layer** — OKX's L2 ("The New Money Chain").
 
-Indexes every swap on the network in real time and across full history, and — unlike
-generic indexers — resolves the **real user** behind routers, aggregators, and
-ERC-4337 smart accounts.
+Explorers and raw-data platforms show *transactions*; this indexer reconstructs
+*actions*: who traded what, across full history and in real time. It resolves the
+**real economic actor** behind routers, aggregators, ERC-4337 bundlers and
+custodial platform contracts — the layer that raw chain data (including
+Dune's X Layer tables) does not provide.
 
 Built during [OKX Dev Day 2026](https://luma.com/l4aq8vii) as the data layer for our
 AI agent pipeline; released as a standalone open-source contribution to the X Layer
